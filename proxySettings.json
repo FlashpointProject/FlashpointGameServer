@@ -53,6 +53,7 @@
     "aifc": "audio/aiff",
     "aiff": "audio/aiff",
     "asd": "application/astound",
+    "asmx": "text/xml",
     "asn": "application/astound",
     "au": "audio/basic",
     "aut": "application/pbautomation",
