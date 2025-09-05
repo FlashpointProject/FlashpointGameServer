@@ -189,7 +189,7 @@ func setContentType(r *http.Request, resp *http.Response) {
 				if element == e {
 					resp.Header.Set("Content-Encoding", "br")
 					// Try and use the previous ending for content type, if exists
-					prevExt := strings.TrimSuffix(strings.ToLower(fname), "."+e)
+					prevExt := filepath.Ext(strings.TrimSuffix(strings.ToLower(fname), "."+e))
 					if prevExt != "" {
 						prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
 						if prevMime != "" {
@@ -222,7 +222,7 @@ func setContentType(r *http.Request, resp *http.Response) {
 				if element == e {
 					resp.Header.Set("Content-Encoding", "br")
 					// Try and use the previous ending for content type, if exists
-					prevExt := strings.TrimSuffix(strings.ToLower(fnameHeader), "."+e)
+					prevExt := filepath.Ext(strings.TrimSuffix(strings.ToLower(fnameHeader), "."+e))
 					if prevExt != "" {
 						prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
 						if prevMime != "" {
