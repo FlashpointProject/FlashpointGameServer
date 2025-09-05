@@ -47,6 +47,7 @@ type ServerSettings struct {
 	ExtScriptTypes       []string          `json:"extScriptTypes"`
 	ExtIndexTypes        []string          `json:"extIndexTypes"`
 	ExtGzippeddTypes     []string          `json:"extGzippedTypes"`
+	ExtBrotliTypes       []string          `json:"extBrotliTypes"`
 	ExtMimeTypes         map[string]string `json:"extMimeTypes"`
 }
 
@@ -163,8 +164,10 @@ func setContentType(r *http.Request, resp *http.Response) {
 
 	resp.Header.Del("Content-Type")
 
-	rext := strings.ToLower(filepath.Ext(resp.Header.Get("ZIPSVR_FILENAME")))
-	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(r.URL.Path)))
+	fnameHeader := resp.Header.Get("ZIPSVR_FILENAME")
+	fname := strings.TrimSpace(r.URL.Path)
+	rext := strings.ToLower(filepath.Ext(fnameHeader))
+	ext := strings.ToLower(filepath.Ext(fname))
 	mime := ""
 
 	// If the request already has an extension, fetch the mime via extension
@@ -179,6 +182,22 @@ func setContentType(r *http.Request, resp *http.Response) {
 				if element == e {
 					resp.Header.Set("Content-Encoding", "gzip")
 					break // String found, no need to continue iterating
+				}
+			}
+
+			for _, element := range serverSettings.ExtBrotliTypes {
+				if element == e {
+					resp.Header.Set("Content-Encoding", "br")
+					// Try and use the previous ending for content type, if exists
+					prevExt := strings.TrimSuffix(strings.ToLower(fname), "."+e)
+					if prevExt != "" {
+						prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
+						if prevMime != "" {
+							resp.Header.Set("Content-Type", prevMime)
+							mime = prevMime
+						}
+					}
+					break;
 				}
 			}
 		}
@@ -196,6 +215,22 @@ func setContentType(r *http.Request, resp *http.Response) {
 				if element == e {
 					resp.Header.Set("Content-Encoding", "gzip")
 					break // String found, no need to continue iterating
+				}
+			}
+
+			for _, element := range serverSettings.ExtBrotliTypes {
+				if element == e {
+					resp.Header.Set("Content-Encoding", "br")
+					// Try and use the previous ending for content type, if exists
+					prevExt := strings.TrimSuffix(strings.ToLower(fnameHeader), "."+e)
+					if prevExt != "" {
+						prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
+						if prevMime != "" {
+							resp.Header.Set("Content-Type", prevMime)
+							mime = prevMime
+						}
+					}
+					break;
 				}
 			}
 		}
