@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/FlashpointProject/zipfs"
+	"github.com/andybalholm/brotli"
 	"github.com/elazarl/goproxy"
 )
 
@@ -47,7 +48,6 @@ type ServerSettings struct {
 	ExtScriptTypes       []string          `json:"extScriptTypes"`
 	ExtIndexTypes        []string          `json:"extIndexTypes"`
 	ExtGzippeddTypes     []string          `json:"extGzippedTypes"`
-	ExtBrotliTypes       []string          `json:"extBrotliTypes"`
 	ExtMimeTypes         map[string]string `json:"extMimeTypes"`
 }
 
@@ -162,8 +162,6 @@ func setContentType(r *http.Request, resp *http.Response) {
 		return
 	}
 
-	resp.Header.Del("Content-Type")
-
 	fnameHeader := resp.Header.Get("ZIPSVR_FILENAME")
 	fname := strings.TrimSpace(r.URL.Path)
 	rext := strings.ToLower(filepath.Ext(fnameHeader))
@@ -184,18 +182,15 @@ func setContentType(r *http.Request, resp *http.Response) {
 		}
 
 		// Check if brotli compressed
-		for _, element := range serverSettings.ExtBrotliTypes {
-			if element == e {
-				resp.Header.Set("Content-Encoding", "br")
-				// Try and use the previous ending for content type, if exists
-				prevExt := filepath.Ext(strings.TrimSuffix(strings.ToLower(fname), "."+e))
-				if prevExt != "" {
-					prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
-					if prevMime != "" {
-						mime = prevMime
-					}
+		if e == "br" {
+			resp.Header.Set("Content-Encoding", "br")
+			// Try and use the previous ending for content type, if exists
+			prevExt := filepath.Ext(strings.TrimSuffix(strings.ToLower(fname), "."+e))
+			if prevExt != "" {
+				prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
+				if prevMime != "" {
+					mime = prevMime
 				}
-				break
 			}
 		}
 	}
@@ -214,34 +209,27 @@ func setContentType(r *http.Request, resp *http.Response) {
 		}
 
 		// Check if brotli compressed
-		for _, element := range serverSettings.ExtBrotliTypes {
-			if element == e {
-				resp.Header.Set("Content-Encoding", "br")
-				// Try and use the previous ending for content type, if exists
-				prevExt := filepath.Ext(strings.TrimSuffix(strings.ToLower(fnameHeader), "."+e))
-				if prevExt != "" {
-					prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
-					if prevMime != "" {
-						mime = prevMime
-					}
+		if e == "br" {
+			resp.Header.Set("Content-Encoding", "br")
+			// Try and use the previous ending for content type, if exists
+			prevExt := filepath.Ext(strings.TrimSuffix(strings.ToLower(fnameHeader), "."+e))
+			if prevExt != "" {
+				prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
+				if prevMime != "" {
+					mime = prevMime
 				}
-				break
 			}
 		}
 	}
 
 	// Set content type header
 	if mime != "" {
+		resp.Header.Del("Content-Type")
 		resp.Header.Set("Content-Type", mime)
 	}
 }
 
-func handleRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-	// Remove port from host if exists (old apps don't clean it before sending requests?)
-	r.URL.Host = strings.Split(r.URL.Host, ":")[0]
-	// Clone the body into both requests by reading and making 2 new readers
-	contents, _ := io.ReadAll(r.Body)
-
+func getProxyResp(r *http.Request, contents []byte) (*http.Response, error) {
 	// Copy the original request
 	gamezipRequest := &http.Request{
 		Method: r.Method,
@@ -266,10 +254,10 @@ func handleRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http
 
 	proxyResp, err := client.Do(proxyReq)
 	if err != nil {
-		fmt.Printf("UNHANDLED GAMEZIP SERVER ERROR: %s\n", err)
+		return nil, err
 	}
 	if proxyResp.StatusCode >= 500 {
-		fmt.Println("Gamezip Server Error: ", proxyResp.StatusCode)
+		return proxyResp, nil
 	}
 
 	// Check Legacy
@@ -318,12 +306,102 @@ func handleRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http
 				proxyResp = legacyResp
 			} else {
 				fmt.Printf("UNHANDLED EXTERNAL LEGACY ERROR: %s\n", err)
+				return nil, err
 			}
 		}
 	}
 
-	// Update the content type based upon ext for now.
-	setContentType(r, proxyResp)
+	return proxyResp, nil
+}
+
+func handleRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+	// Remove port from host if exists (old apps don't clean it before sending requests?)
+	r.URL.Host = strings.Split(r.URL.Host, ":")[0]
+	r.Header.Del("If-Modified-Since")
+	// Clone the body into both requests by reading and making 2 new readers
+	contents, _ := io.ReadAll(r.Body)
+
+	proxyResp, err := getProxyResp(r, contents)
+	if err != nil {
+		fmt.Printf("UNHANDLED GAMEZIP SERVER ERROR: %s\n", err)
+		return r, nil
+	}
+	if proxyResp.StatusCode >= 500 {
+		fmt.Println("Gamezip Server Error: ", proxyResp.StatusCode)
+		return r, proxyResp
+	}
+
+	// Not found
+	if proxyResp.StatusCode == 404 {
+		// If it's a Brotli file request, check for an uncompressed file instead
+		if strings.HasSuffix(r.URL.Path, ".br") {
+			// Create a modified request with the path without .br extension
+			unbrotliRequest := *r            // Create a copy of the original request
+			unbrotliRequest.URL = &url.URL{} // Create a new URL to avoid modifying the original
+			*unbrotliRequest.URL = *r.URL    // Copy all URL fields
+
+			// Remove the .br extension from the path
+			unbrotliRequest.URL.Path = strings.TrimSuffix(r.URL.Path, ".br")
+
+			// Use the existing getProxyResp function to make the request
+			unbrotliResp, err := getProxyResp(&unbrotliRequest, contents)
+			if err != nil {
+				fmt.Printf("Error requesting uncompressed file: %s\n", err)
+				return r, proxyResp
+			}
+
+			// If we found the uncompressed version, use it
+			if unbrotliResp.StatusCode == 200 {
+				fmt.Printf("Found uncompressed version of %s\n", r.URL.Path)
+				return r, unbrotliResp
+			}
+
+			// Close the response if we're not using it
+			unbrotliResp.Body.Close()
+		}
+	}
+
+	if proxyResp.StatusCode < 400 {
+		setContentType(r, proxyResp)
+	}
+
+	fmt.Printf("Response: Status=%d, URL=%s\n",
+		proxyResp.StatusCode,
+		r.URL.String())
+
+	// Check if content is brotli-encoded and decode it so we can respond to HTTP requests
+	if proxyResp.StatusCode < 400 && strings.ToLower(proxyResp.Header.Get("Content-Encoding")) == "br" {
+		// Read the brotli-encoded body
+		brBody, err := io.ReadAll(proxyResp.Body)
+		if err != nil {
+			fmt.Printf("Error reading brotli-encoded body: %s\n", err)
+		} else {
+			// Close the original body
+			proxyResp.Body.Close()
+
+			// Decode the brotli content
+			reader := brotli.NewReader(bytes.NewReader(brBody))
+			decodedBody, err := io.ReadAll(reader)
+			if err != nil {
+				fmt.Printf("Error decoding brotli content: %s\n", err)
+				// Restore original body if decoding fails
+				proxyResp.Body = io.NopCloser(bytes.NewReader(brBody))
+			} else {
+				// Replace the body with decoded content
+				proxyResp.Body = io.NopCloser(bytes.NewReader(decodedBody))
+				// Remove the Content-Encoding header
+				proxyResp.Header.Del("Content-Encoding")
+
+				// Update Content-Length if it exists
+				if proxyResp.ContentLength > 0 {
+					proxyResp.ContentLength = int64(len(decodedBody))
+					proxyResp.Header.Set("Content-Length", fmt.Sprintf("%d", len(decodedBody)))
+				}
+
+				fmt.Println("Decoded brotli content for HTTP request")
+			}
+		}
+	}
 
 	// Add extra headers
 	proxyResp.Header.Set("Access-Control-Allow-Headers", "*")
