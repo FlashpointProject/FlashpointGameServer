@@ -44,9 +44,6 @@
   "extGzippedTypes": [
     "svgz"
   ],
-  "extBrotliTypes": [
-    "br"
-  ],
   "extMimeTypes": {
     "aab": "application/x-authorware-bin",
     "aam": "application/x-authorware-map",
