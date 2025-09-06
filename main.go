@@ -171,67 +171,61 @@ func setContentType(r *http.Request, resp *http.Response) {
 	mime := ""
 
 	// If the request already has an extension, fetch the mime via extension
-	if ext != "" {
-		resp.Header.Set("Content-Type", serverSettings.ExtMimeTypes[ext[1:]])
-		mime = serverSettings.ExtMimeTypes[ext[1:]]
-		if mime != "" && len(ext) > 1 {
-			resp.Header.Set("Content-Type", mime)
-			e := ext[1:]
-			// If pre-compressed set encoding type
-			for _, element := range serverSettings.ExtGzippeddTypes {
-				if element == e {
-					resp.Header.Set("Content-Encoding", "gzip")
-					break // String found, no need to continue iterating
-				}
-			}
+	if ext != "" && len(ext) > 1 {
+		e := ext[1:]
+		mime = serverSettings.ExtMimeTypes[e]
 
-			for _, element := range serverSettings.ExtBrotliTypes {
-				if element == e {
-					resp.Header.Set("Content-Encoding", "br")
-					// Try and use the previous ending for content type, if exists
-					prevExt := filepath.Ext(strings.TrimSuffix(strings.ToLower(fname), "."+e))
-					if prevExt != "" {
-						prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
-						if prevMime != "" {
-							resp.Header.Set("Content-Type", prevMime)
-							mime = prevMime
-						}
+		// Check if gzipped
+		for _, element := range serverSettings.ExtGzippeddTypes {
+			if element == e {
+				resp.Header.Set("Content-Encoding", "gzip")
+				break // String found, no need to continue iterating
+			}
+		}
+
+		// Check if brotli compressed
+		for _, element := range serverSettings.ExtBrotliTypes {
+			if element == e {
+				resp.Header.Set("Content-Encoding", "br")
+				// Try and use the previous ending for content type, if exists
+				prevExt := filepath.Ext(strings.TrimSuffix(strings.ToLower(fname), "."+e))
+				if prevExt != "" {
+					prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
+					if prevMime != "" {
+						mime = prevMime
 					}
-					break;
 				}
+				break
 			}
 		}
 	}
 
-	// If the response has an extension, try and fetch the mime for that via extension
-	if mime == "" && rext != "" {
-		resp.Header.Set("Content-Type", serverSettings.ExtMimeTypes[rext[1:]])
-		mime = serverSettings.ExtMimeTypes[rext[1:]]
-		if mime != "" && len(rext) > 1 {
-			resp.Header.Set("Content-Type", mime)
-			e := rext[1:]
-			// If pre-compressed set encoding type
-			for _, element := range serverSettings.ExtGzippeddTypes {
-				if element == e {
-					resp.Header.Set("Content-Encoding", "gzip")
-					break // String found, no need to continue iterating
-				}
-			}
+	// Sometimes we're given the filename via a header instead, check that too
+	if mime == "" && rext != "" && len(rext) > 1 {
+		e := rext[1:]
+		mime = serverSettings.ExtMimeTypes[e]
 
-			for _, element := range serverSettings.ExtBrotliTypes {
-				if element == e {
-					resp.Header.Set("Content-Encoding", "br")
-					// Try and use the previous ending for content type, if exists
-					prevExt := filepath.Ext(strings.TrimSuffix(strings.ToLower(fnameHeader), "."+e))
-					if prevExt != "" {
-						prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
-						if prevMime != "" {
-							resp.Header.Set("Content-Type", prevMime)
-							mime = prevMime
-						}
+		// Check if gzipped
+		for _, element := range serverSettings.ExtGzippeddTypes {
+			if element == e {
+				resp.Header.Set("Content-Encoding", "gzip")
+				break // String found, no need to continue iterating
+			}
+		}
+
+		// Check if brotli compressed
+		for _, element := range serverSettings.ExtBrotliTypes {
+			if element == e {
+				resp.Header.Set("Content-Encoding", "br")
+				// Try and use the previous ending for content type, if exists
+				prevExt := filepath.Ext(strings.TrimSuffix(strings.ToLower(fnameHeader), "."+e))
+				if prevExt != "" {
+					prevMime := serverSettings.ExtMimeTypes[prevExt[1:]]
+					if prevMime != "" {
+						mime = prevMime
 					}
-					break;
 				}
+				break
 			}
 		}
 	}
