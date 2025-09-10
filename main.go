@@ -162,11 +162,17 @@ func setContentType(r *http.Request, resp *http.Response) {
 		return
 	}
 
+	currentMime := resp.Header.Get("Content-Type")
 	fnameHeader := resp.Header.Get("ZIPSVR_FILENAME")
 	fname := strings.TrimSpace(r.URL.Path)
 	rext := strings.ToLower(filepath.Ext(fnameHeader))
 	ext := strings.ToLower(filepath.Ext(fname))
 	mime := ""
+
+	if (ext == ".php" || rext == ".php") && currentMime != "" {
+		// Keep content types set by php script if available
+		return
+	}
 
 	// If the request already has an extension, fetch the mime via extension
 	if ext != "" && len(ext) > 1 {
