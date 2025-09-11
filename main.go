@@ -174,6 +174,8 @@ func setContentType(r *http.Request, resp *http.Response) {
 		return
 	}
 
+	resp.Header.Del("Content-Type")
+
 	// If the request already has an extension, fetch the mime via extension
 	if ext != "" && len(ext) > 1 {
 		e := ext[1:]
