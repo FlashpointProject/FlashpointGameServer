@@ -124,6 +124,7 @@
     "med": "audio/x-mod",
     "mid": "audio/mid",
     "midi": "audio/midi",
+    "mjs": "text/javascript",
     "mod": "audio/mod",
     "mol": "chemical/x-mdl-molfile",
     "mop": "chemical/x-mopac-input",
