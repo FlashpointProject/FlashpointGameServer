@@ -169,6 +169,11 @@ func setContentType(r *http.Request, resp *http.Response) {
 	ext := strings.ToLower(filepath.Ext(fname))
 	mime := ""
 
+	if currentMime == "text/html; charset=utf-8" {
+		currentMime = "text/html"
+		resp.Header.Set("Content-Type", currentMime)
+	}
+
 	if (ext == ".php" || rext == ".php") && currentMime != "" {
 		// Keep content types set by php script if available
 		return
