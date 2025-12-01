@@ -258,7 +258,12 @@ func getProxyResp(r *http.Request, contents []byte) (*http.Response, error) {
 	gamezipRequest.Body = io.NopCloser(bytes.NewReader(contents))
 
 	// Make the request to the zip server.
-	client := &http.Client{}
+	client := &http.Client{
+		// Don't follow redirects, let the client we've serving do it instead
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	proxyReq, err := http.NewRequest(gamezipRequest.Method, gamezipRequest.URL.String(), gamezipRequest.Body)
 	if err != nil {
 		fmt.Printf("UNHANDLED GAMEZIP ERROR: %s\n", err)
